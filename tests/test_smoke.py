@@ -1,8 +1,8 @@
+from conftest import TEST_TOKEN
+
 from simple_salesforce_mcp import __version__
 from simple_salesforce_mcp.server import main
 from simple_salesforce_mcp.tools import TOOL_REGISTRY
-
-from conftest import TEST_TOKEN
 
 
 def test_self_test_without_credentials(clean_env, capsys):
@@ -40,11 +40,7 @@ def test_annotations_are_set_on_every_tool():
     for name, (tool, _) in TOOL_REGISTRY.items():
         assert tool.annotations is not None, name
         assert tool.annotations.readOnlyHint is not None, name
-    read_only = {
-        name
-        for name, (tool, _) in TOOL_REGISTRY.items()
-        if tool.annotations.readOnlyHint
-    }
+    read_only = {name for name, (tool, _) in TOOL_REGISTRY.items() if tool.annotations.readOnlyHint}
     assert read_only == {
         "run_soql_query",
         "search_records",
@@ -54,9 +50,7 @@ def test_annotations_are_set_on_every_tool():
         "get_org_info",
     }
     destructive = {
-        name
-        for name, (tool, _) in TOOL_REGISTRY.items()
-        if tool.annotations.destructiveHint
+        name for name, (tool, _) in TOOL_REGISTRY.items() if tool.annotations.destructiveHint
     }
     assert destructive == {"update_record", "delete_record"}
 

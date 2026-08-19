@@ -22,9 +22,7 @@ def write_sfdx_store(
     (home / ".sf").mkdir(parents=True, exist_ok=True)
     (home / ".sfdx").mkdir(parents=True, exist_ok=True)
     (home / ".sf" / "config.json").write_text(json.dumps({"target-org": username}))
-    (home / ".sfdx" / "sfdx-config.json").write_text(
-        json.dumps({"defaultusername": username})
-    )
+    (home / ".sfdx" / "sfdx-config.json").write_text(json.dumps({"defaultusername": username}))
     auth = {"username": username, "accessToken": token, "instanceUrl": instance}
     if extra:
         auth.update(extra)

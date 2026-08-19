@@ -70,9 +70,7 @@ def handle_run_soql_query(client: SalesforceClient, arguments: dict) -> str:
             f"Response truncated: showing {len(kept)} of {len(records)} fetched "
             "records. Add a LIMIT or select fewer fields"
         )
-        payload["note"] = note + (
-            ", or pass next_url to page." if payload.get("next_url") else "."
-        )
+        payload["note"] = note + (", or pass next_url to page." if payload.get("next_url") else ".")
     return to_compact_json(payload)
 
 
@@ -146,8 +144,7 @@ def handle_search_records(client: SalesforceClient, arguments: dict) -> str:
     body: dict = {"q": term, "in": "ALL", "overallLimit": limit}
     if object_types:
         body["sobjects"] = [
-            {"name": obj, **({"fields": fields} if fields else {})}
-            for obj in object_types
+            {"name": obj, **({"fields": fields} if fields else {})} for obj in object_types
         ]
     result = client.parameterized_search(body)
 

@@ -84,13 +84,17 @@ uvx --from . simple-salesforce-mcp --test
 
 ```bash
 uv run pytest                    # unit tests, no network needed
+uv run ruff check .              # lint
+uv run ruff format .             # format (--check to verify only)
+uv run mypy                      # type check (src and tests)
 uv run simple-salesforce-mcp --test
 npx @modelcontextprotocol/inspector uv run simple-salesforce-mcp   # interactive
 ```
 
-CI (`.github/workflows/tests.yml`) runs the suite on Python 3.10–3.13 for every push
-and pull request, and separately installs the package the way sandboxes do
-(`uvx --from .`) to catch packaging breakage.
+CI (`.github/workflows/tests.yml`) runs on every push and pull request: the test
+suite on Python 3.10–3.13, ruff lint and format checks plus mypy, and a packaging
+job that installs the package the way sandboxes do (`uvx --from .`) to catch
+packaging breakage.
 
 ## Security notes
 

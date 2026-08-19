@@ -20,7 +20,11 @@ dependencies = [
 simple-salesforce-mcp = "simple_salesforce_mcp.server:main"
 
 [dependency-groups]
-dev = ["pytest>=8.0"]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.14",
+    "mypy>=1.18",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/simple_salesforce_mcp"]
@@ -28,3 +32,30 @@ packages = ["src/simple_salesforce_mcp"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # import sorting
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "SIM",  # simplify
+    "RUF",  # ruff-specific
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["simple_salesforce_mcp"]
+
+[tool.mypy]
+files = ["src", "tests"]
+python_version = "3.10"
+# The test suite imports fixtures from conftest by module name, matching the
+# pytest rootdir layout rather than an installed package path.
+mypy_path = "src:tests"
+explicit_package_bases = true

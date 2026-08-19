@@ -1,10 +1,9 @@
 import httpx
 import pytest
-
-from simple_salesforce_mcp.sf_client import SalesforceApiError, SalesforceClient
-from simple_salesforce_mcp.server import dispatch_tool, run_with_auth_retry
-
 from conftest import json_response, write_sfdx_store
+
+from simple_salesforce_mcp.server import dispatch_tool, run_with_auth_retry
+from simple_salesforce_mcp.sf_client import SalesforceApiError, SalesforceClient
 
 
 def _query_handler(client, arguments):
@@ -52,9 +51,7 @@ def test_non_auth_errors_do_not_retry(fake_home):
 
     def transport_handler(request):
         calls.append(1)
-        return json_response(
-            [{"message": "bad query", "errorCode": "MALFORMED_QUERY"}], status=400
-        )
+        return json_response([{"message": "bad query", "errorCode": "MALFORMED_QUERY"}], status=400)
 
     def client_factory(creds):
         return SalesforceClient(creds, transport=httpx.MockTransport(transport_handler))

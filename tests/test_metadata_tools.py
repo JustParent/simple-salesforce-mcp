@@ -1,13 +1,13 @@
 import json
 
+from conftest import TEST_INSTANCE, json_response
+
 from simple_salesforce_mcp.tools.metadata import (
     handle_describe_object,
     handle_get_org_info,
     handle_list_objects,
     trim_describe,
 )
-
-from conftest import TEST_INSTANCE, json_response
 
 DESCRIBE_FIXTURE = {
     "name": "Account",
@@ -123,9 +123,7 @@ def test_trim_describe_full():
     assert out["child_relationships"] == [
         {"child_object": "Contact", "relationship_name": "Contacts", "field": "AccountId"}
     ]
-    assert out["record_types"] == [
-        {"name": "Master", "id": "012000000000000AAA", "default": True}
-    ]
+    assert out["record_types"] == [{"name": "Master", "id": "012000000000000AAA", "default": True}]
     by_name = {f["name"]: f for f in out["fields"]}
     assert by_name["Score__c"]["help_text"] == "Computed score"
 
@@ -148,7 +146,12 @@ SOBJECTS_FIXTURE = {
         {"name": "Account", "label": "Account", "custom": False, "queryable": True},
         {"name": "AccountShare", "label": "Account Share", "custom": False, "queryable": True},
         {"name": "AccountHistory", "label": "Account History", "custom": False, "queryable": True},
-        {"name": "AccountChangeEvent", "label": "Change Event", "custom": False, "queryable": False},
+        {
+            "name": "AccountChangeEvent",
+            "label": "Change Event",
+            "custom": False,
+            "queryable": False,
+        },
         {"name": "Contact", "label": "Contact", "custom": False, "queryable": True},
         {"name": "Foo__c", "label": "Foo", "custom": True, "queryable": True},
         {"name": "Hidden", "label": "Hidden", "custom": False, "queryable": False},
@@ -219,9 +222,7 @@ def test_get_org_info_env_mode_uses_userinfo(clean_env, monkeypatch):
             )
         return json_response({"totalSize": 1, "done": True, "records": [ORG_RECORD]})
 
-    client = SalesforceClient(
-        resolve_credentials(), transport=httpx.MockTransport(handler)
-    )
+    client = SalesforceClient(resolve_credentials(), transport=httpx.MockTransport(handler))
     with client:
         payload = json.loads(handle_get_org_info(client, {}))
     assert payload["username"] == "env@example.org"

@@ -2,6 +2,7 @@ import json
 
 import httpx
 import pytest
+from conftest import json_response
 
 from simple_salesforce_mcp.tools.records import (
     handle_create_record,
@@ -9,8 +10,6 @@ from simple_salesforce_mcp.tools.records import (
     handle_get_record,
     handle_update_record,
 )
-
-from conftest import json_response
 
 
 @pytest.fixture
@@ -29,9 +28,7 @@ def test_get_record_passes_fields(make_client):
     def handler(request):
         seen["path"] = request.url.path
         seen["fields"] = request.url.params.get("fields")
-        return json_response(
-            {"attributes": {"type": "Account"}, "Id": "001", "Name": "Acme"}
-        )
+        return json_response({"attributes": {"type": "Account"}, "Id": "001", "Name": "Acme"})
 
     with make_client(handler) as client:
         payload = json.loads(
@@ -53,17 +50,15 @@ def test_create_record(make_client):
         return json_response({"id": "001NEW", "success": True, "errors": []}, status=201)
 
     with make_client(handler) as client:
-        text = handle_create_record(
-            client, {"object_type": "Account", "data": {"Name": "Acme"}}
-        )
+        text = handle_create_record(client, {"object_type": "Account", "data": {"Name": "Acme"}})
     assert text == "Created Account 001NEW."
 
 
 def test_create_requires_non_empty_data(refusing_client):
     with refusing_client as client:
-        assert handle_create_record(
-            client, {"object_type": "Account", "data": {}}
-        ).startswith("ERROR:")
+        assert handle_create_record(client, {"object_type": "Account", "data": {}}).startswith(
+            "ERROR:"
+        )
 
 
 def test_update_without_confirm_is_blocked_and_makes_no_call(refusing_client):
@@ -118,9 +113,7 @@ def test_update_with_confirm_patches_and_strips_id(make_client):
 
 def test_delete_without_confirm_is_blocked(refusing_client):
     with refusing_client as client:
-        text = handle_delete_record(
-            client, {"object_type": "Account", "record_id": "001"}
-        )
+        text = handle_delete_record(client, {"object_type": "Account", "record_id": "001"})
     assert text.startswith("CONFIRMATION REQUIRED")
     assert "permanently delete Account 001" in text
 

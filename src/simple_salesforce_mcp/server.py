@@ -59,10 +59,7 @@ def run_with_auth_retry(handler, arguments: dict, client_factory=SalesforceClien
 def dispatch_tool(name: str, arguments: dict) -> str:
     entry = TOOL_REGISTRY.get(name)
     if entry is None:
-        return (
-            f"ERROR: unknown tool {name!r}. "
-            f"Available tools: {', '.join(sorted(TOOL_REGISTRY))}"
-        )
+        return f"ERROR: unknown tool {name!r}. Available tools: {', '.join(sorted(TOOL_REGISTRY))}"
     _, handler = entry
     try:
         text = run_with_auth_retry(handler, arguments)

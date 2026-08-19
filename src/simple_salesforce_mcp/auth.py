@@ -91,9 +91,7 @@ def _discover_username(home: Path) -> str | None:
     sfdx_dir = home / ".sfdx"
     if not sfdx_dir.is_dir():
         return None
-    candidates = [
-        p for p in sorted(sfdx_dir.glob("*.json")) if p.name not in _NON_AUTH_SFDX_FILES
-    ]
+    candidates = [p for p in sorted(sfdx_dir.glob("*.json")) if p.name not in _NON_AUTH_SFDX_FILES]
     if len(candidates) == 1:
         return candidates[0].stem
     if len(candidates) > 1:

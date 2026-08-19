@@ -1,13 +1,12 @@
 import httpx
 import pytest
+from conftest import json_response
 
 from simple_salesforce_mcp.sf_client import (
     SalesforceApiError,
     SalesforceAuthError,
     resolve_api_version,
 )
-
-from conftest import json_response
 
 
 def test_error_normalization_from_array_body(make_client):
@@ -23,9 +22,8 @@ def test_error_normalization_from_array_body(make_client):
             status=400,
         )
 
-    with make_client(handler) as client:
-        with pytest.raises(SalesforceApiError) as exc_info:
-            client.query("SELECT Foo FROM Account")
+    with make_client(handler) as client, pytest.raises(SalesforceApiError) as exc_info:
+        client.query("SELECT Foo FROM Account")
     err = exc_info.value
     assert err.status == 400
     assert err.error_code == "INVALID_FIELD"
@@ -45,9 +43,8 @@ def test_required_fields_passed_through(make_client):
             status=400,
         )
 
-    with make_client(handler) as client:
-        with pytest.raises(SalesforceApiError) as exc_info:
-            client.create("Contact", {"FirstName": "A"})
+    with make_client(handler) as client, pytest.raises(SalesforceApiError) as exc_info:
+        client.create("Contact", {"FirstName": "A"})
     assert "LastName" in exc_info.value.for_model()
 
 
@@ -58,9 +55,8 @@ def test_401_is_auth_error(make_client):
             status=401,
         )
 
-    with make_client(handler) as client:
-        with pytest.raises(SalesforceAuthError):
-            client.query("SELECT Id FROM Account")
+    with make_client(handler) as client, pytest.raises(SalesforceAuthError):
+        client.query("SELECT Id FROM Account")
 
 
 def test_invalid_session_without_401_is_auth_error(make_client):
@@ -70,18 +66,16 @@ def test_invalid_session_without_401_is_auth_error(make_client):
             status=400,
         )
 
-    with make_client(handler) as client:
-        with pytest.raises(SalesforceAuthError):
-            client.query("SELECT Id FROM Account")
+    with make_client(handler) as client, pytest.raises(SalesforceAuthError):
+        client.query("SELECT Id FROM Account")
 
 
 def test_non_json_error_body(make_client):
     def handler(request):
         return httpx.Response(502, text="<html>Bad gateway</html>")
 
-    with make_client(handler) as client:
-        with pytest.raises(SalesforceApiError) as exc_info:
-            client.query("SELECT Id FROM Account")
+    with make_client(handler) as client, pytest.raises(SalesforceApiError) as exc_info:
+        client.query("SELECT Id FROM Account")
     assert "502" in exc_info.value.for_model()
 
 

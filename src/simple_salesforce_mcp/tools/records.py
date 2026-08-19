@@ -69,8 +69,7 @@ CREATE_RECORD = Tool(
             "data": {
                 "type": "object",
                 "description": (
-                    "Field API names to values, e.g. "
-                    '{"Name": "Acme", "Industry": "Energy"}.'
+                    'Field API names to values, e.g. {"Name": "Acme", "Industry": "Energy"}.'
                 ),
             },
         },

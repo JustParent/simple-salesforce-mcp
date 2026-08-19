@@ -70,14 +70,10 @@ def trim_describe(raw: dict, full: bool) -> dict:
             entry["required"] = True
         if not f.get("createable") and not f.get("updateable"):
             entry["readonly"] = True
-        if f.get("type") in ("string", "textarea", "phone", "url", "email") and f.get(
-            "length"
-        ):
+        if f.get("type") in ("string", "textarea", "phone", "url", "email") and f.get("length"):
             entry["length"] = f["length"]
         if f.get("type") in ("picklist", "multipicklist"):
-            values = [
-                v for v in f.get("picklistValues") or [] if v.get("active", True)
-            ]
+            values = [v for v in f.get("picklistValues") or [] if v.get("active", True)]
             entry["picklist_values"] = [
                 v["value"]
                 if v.get("label") in (None, v.get("value"))

@@ -1,14 +1,13 @@
-import json
+import dataclasses
 
 import pytest
+from conftest import TEST_INSTANCE, TEST_TOKEN, TEST_USERNAME, write_sfdx_store
 
 from simple_salesforce_mcp.auth import (
     Credentials,
     CredentialsError,
     resolve_credentials,
 )
-
-from conftest import TEST_INSTANCE, TEST_TOKEN, TEST_USERNAME, write_sfdx_store
 
 
 def test_resolves_from_target_org(fake_home):
@@ -104,5 +103,5 @@ def test_configured_but_missing_auth_file_falls_through(fake_home):
 
 def test_credentials_is_frozen():
     creds = Credentials(access_token="t", instance_url="https://x")
-    with pytest.raises(Exception):
+    with pytest.raises(dataclasses.FrozenInstanceError):
         creds.access_token = "other"

@@ -29,16 +29,12 @@ HINTS = {
         "Check the SOQL syntax and the exact API names with describe_object / list_objects."
     ),
     "INVALID_FIELD": "Check exact field API names with describe_object('<Object>').",
-    "INVALID_TYPE": (
-        "Check the object API name with list_objects (custom objects end in __c)."
-    ),
+    "INVALID_TYPE": "Check the object API name with list_objects (custom objects end in __c).",
     "INVALID_FIELD_FOR_INSERT_UPDATE": (
-        "This field is not writable; describe_object shows which fields are "
-        "createable/updateable."
+        "This field is not writable; describe_object shows which fields are createable/updateable."
     ),
     "NOT_FOUND": (
-        "Check the record Id (15 or 18 characters) and that object_type is the exact "
-        "API name."
+        "Check the record Id (15 or 18 characters) and that object_type is the exact API name."
     ),
     "REQUIRED_FIELD_MISSING": "describe_object shows which fields are required.",
     "INSUFFICIENT_ACCESS_OR_READONLY": (
@@ -113,7 +109,7 @@ class SalesforceClient:
     def close(self) -> None:
         self._http.close()
 
-    def __enter__(self) -> "SalesforceClient":
+    def __enter__(self) -> SalesforceClient:
         return self
 
     def __exit__(self, *exc_info) -> None:
@@ -173,8 +169,7 @@ class SalesforceClient:
     def describe(self, object_type: str) -> dict:
         return self._request(
             "GET",
-            f"{self.data_path}/sobjects/{_valid_segment(object_type, 'object_type')}"
-            "/describe/",
+            f"{self.data_path}/sobjects/{_valid_segment(object_type, 'object_type')}/describe/",
         ).json()
 
     def list_sobjects(self) -> dict:

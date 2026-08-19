@@ -6,7 +6,7 @@ wraps them with credential resolution and auth retry.
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from mcp.types import Tool
 
@@ -16,6 +16,5 @@ from . import metadata, query, records
 Handler = Callable[[SalesforceClient, dict], str]
 
 TOOL_REGISTRY: dict[str, tuple[Tool, Handler]] = {
-    tool.name: (tool, handler)
-    for tool, handler in [*query.TOOLS, *records.TOOLS, *metadata.TOOLS]
+    tool.name: (tool, handler) for tool, handler in [*query.TOOLS, *records.TOOLS, *metadata.TOOLS]
 }

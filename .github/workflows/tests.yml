@@ -61,3 +61,33 @@ jobs:
       # rather than at install time in a sandbox.
       - name: Install from source and smoke-test
         run: uvx --from . simple-salesforce-mcp --test
+
+  lint:
+    name: ruff and mypy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-lint-${{ hashFiles('uv.lock') }}
+          restore-keys: uv-${{ runner.os }}-lint-
+
+      # Each check runs even if an earlier one failed, so a single CI round
+      # reports every problem rather than just the first.
+      - name: ruff check
+        run: uv run --locked ruff check --output-format github .
+
+      - name: ruff format
+        if: ${{ !cancelled() }}
+        run: uv run --locked ruff format --check .
+
+      - name: mypy
+        if: ${{ !cancelled() }}
+        run: uv run --locked mypy
