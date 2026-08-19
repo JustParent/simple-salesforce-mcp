@@ -1,5 +1,7 @@
 # simple-salesforce-mcp
 
+[![Tests](https://github.com/JustParent/simple-salesforce-mcp/actions/workflows/tests.yml/badge.svg)](https://github.com/JustParent/simple-salesforce-mcp/actions/workflows/tests.yml)
+
 A lightweight Salesforce [MCP](https://modelcontextprotocol.io) server. Talks straight to the
 Salesforce REST API over stdio with two runtime dependencies (`mcp`, `httpx`) — built as a
 fast-cold-start replacement for the official `@salesforce/mcp` DX server, whose dependency
@@ -85,6 +87,10 @@ uv run pytest                    # unit tests, no network needed
 uv run simple-salesforce-mcp --test
 npx @modelcontextprotocol/inspector uv run simple-salesforce-mcp   # interactive
 ```
+
+CI (`.github/workflows/tests.yml`) runs the suite on Python 3.10–3.13 for every push
+and pull request, and separately installs the package the way sandboxes do
+(`uvx --from .`) to catch packaging breakage.
 
 ## Security notes
 
