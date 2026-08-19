@@ -1,0 +1,93 @@
+name: Tests
+
+# Runs the pytest suite (no network — the Salesforce API is stubbed with an
+# httpx MockTransport) across every Python version the package supports, plus a
+# packaging check that installs the server the same way sandboxes do.
+#
+# uv is installed via its official script rather than a third-party setup
+# action, so the workflow depends only on first-party actions.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: pytest (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Floor is the requires-python in pyproject.toml; sandboxes run 3.12.
+        python-version: ['3.10', '3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/cache@v5
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}
+          restore-keys: uv-${{ runner.os }}-py${{ matrix.python-version }}-
+
+      # --locked also fails if uv.lock has drifted from pyproject.toml.
+      - name: Run tests
+        run: uv run --python ${{ matrix.python-version }} --locked pytest -q
+
+  package:
+    name: Build and run as an installed package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # Mirrors how the catalog installs this server (uvx builds from the source
+      # tree and runs the console script), so packaging breakage fails here
+      # rather than at install time in a sandbox.
+      - name: Install from source and smoke-test
+        run: uvx --from . simple-salesforce-mcp --test
+
+  lint:
+    name: ruff and mypy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/cache@v5
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-lint-${{ hashFiles('uv.lock') }}
+          restore-keys: uv-${{ runner.os }}-lint-
+
+      # Each check runs even if an earlier one failed, so a single CI round
+      # reports every problem rather than just the first.
+      - name: ruff check
+        run: uv run --locked ruff check --output-format github .
+
+      - name: ruff format
+        if: ${{ !cancelled() }}
+        run: uv run --locked ruff format --check .
+
+      - name: mypy
+        if: ${{ !cancelled() }}
+        run: uv run --locked mypy
