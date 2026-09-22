@@ -20,6 +20,8 @@ tree is too heavy for sandboxed environments.
 | `describe_object` | no | Trimmed object metadata (fields, types, required, picklists) |
 | `list_objects` | no | Org objects, system noise filtered by default |
 | `get_org_info` | no | Current user, org, instance URL, API version |
+| `list_record_files` | no | Files, legacy Attachments, and (for Cases) email attachments on a record |
+| `download_file` | no | Streams a file to disk and returns a link or path, never the bytes |
 
 Every tool carries MCP annotations (`readOnlyHint` / `destructiveHint` / `idempotentHint`).
 `update_record` and `delete_record` refuse to act unless the call includes `confirm: true`,
@@ -47,6 +49,28 @@ On a rejected token (HTTP 401 / `INVALID_SESSION_ID`) the server re-reads the au
 once and retries, then reports that the connection needs to be re-established.
 
 The REST API version defaults to `62.0`; override with `SALESFORCE_API_VERSION`.
+
+## Downloading files
+
+`download_file` never puts file content in a tool result, so any file size works and tool-call
+logs only ever hold a small JSON envelope (`file_name`, `content_type`, `size`, `sha256`, plus
+where to get the file). It accepts ContentVersion (`068…`), ContentDocument (`069…`, the latest
+version is used) and Attachment (`00P…`) Ids, and streams the blob to disk in chunks.
+
+- **Hosted sandbox (Harriet).** When `HARRIET_FILE_OUTBOX_DIR` is set, the file is streamed
+  into a hidden `.staging-*` directory with a `.meta.json` alongside, then renamed to
+  `<outbox>/<token>/<file name>` once complete. `token` is `<expires_at>.<random>`: the Unix
+  expiry time (now + `HARRIET_FILE_OUTBOX_TTL_SECONDS`, default 120) and 256 random bits. The
+  result carries `download_url` = `<base>/files/<token>` (with `<base>` read from
+  `<outbox>/.base_url`) and `expires_at`. The sandbox bridge serves that URL **once**, then
+  deletes the file. It refuses the link once the expiry in the token has passed *or* the file
+  on disk is older than the TTL, since each check works without the other, and it sweeps
+  expired files in the background. The client fetches the link straight into its
+  workspace, e.g. `curl -fsSL -o scan.jpg "<download_url>"`.
+- **Local (standalone).** Otherwise the file is saved under `SALESFORCE_DOWNLOAD_DIR`
+  (default `<tmp>/simple-salesforce-mcp`) and the result carries `local_path`.
+
+Downloads above `SALESFORCE_MAX_DOWNLOAD_BYTES` (default 500 MB) are refused.
 
 ## Running
 
@@ -104,3 +128,5 @@ packaging breakage.
 - SOQL pagination cursors (`next_url`) are validated to be `/services/data/...` paths, and
   object/record identifiers are validated before being placed in URLs.
 - Responses are size-capped with explicit truncation notices.
+- File downloads never travel through a tool result; hosted download links are single-use,
+  short-lived, and unguessable, and file names are reduced to a safe single path component.
