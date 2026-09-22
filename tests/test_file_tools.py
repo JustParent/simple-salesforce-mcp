@@ -1,11 +1,15 @@
 import hashlib
 import json
+import re
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
 import pytest
 from conftest import json_response
 
+from simple_salesforce_mcp.sf_client import SalesforceApiError
 from simple_salesforce_mcp.tools import files
 from simple_salesforce_mcp.tools.files import (
     handle_download_file,
@@ -158,25 +162,48 @@ def outbox(tmp_path, monkeypatch):
 
 
 def test_download_file_writes_to_outbox_and_returns_link(make_client, outbox):
+    before = int(time.time())
     with make_client(_download_handler()) as client:
         out = handle_download_file(client, {"file_id": VERSION_ID})
+    after = int(time.time())
 
     result = json.loads(out)
     assert "data" not in result
     assert len(out) < 2000  # the tool result carries metadata only, never the bytes
     token = result["download_url"].rsplit("/", 1)[-1]
     assert result["download_url"] == f"https://sb-123.modal.host/files/{token}"
-    assert len(token) >= 32
     assert result["single_use"] is True
     assert result["expires_in_seconds"] == 120
     assert result["size"] == len(BLOB)
     assert result["sha256"] == hashlib.sha256(BLOB).hexdigest()
     assert result["content_type"] == "image/jpeg"
 
+    # The token carries its own expiry so the bridge can check it independently.
+    match = re.fullmatch(r"([0-9]{10})\.[A-Za-z0-9_-]{43}", token)
+    assert match is not None
+    expires_at = int(match.group(1))
+    assert before + 120 <= expires_at <= after + 120
+    assert result["expires_at"] == (
+        datetime.fromtimestamp(expires_at, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    )
+
+    # Only the finished token dir is left; the staging dir was renamed into place.
+    assert sorted(p.name for p in outbox.iterdir()) == [".base_url", token]
     token_dir = outbox / token
     assert (token_dir / "2026-09-01_behaviour.jpg").read_bytes() == BLOB
     meta = json.loads((token_dir / ".meta.json").read_text())
     assert meta == {"file_name": "2026-09-01_behaviour.jpg", "content_type": "image/jpeg"}
+
+
+def test_download_file_failure_leaves_nothing_in_outbox(make_client, outbox):
+    def handler(request):
+        if "VersionData" in request.url.path:
+            return json_response([{"errorCode": "NOT_FOUND", "message": "gone"}], 404)
+        return _download_handler()(request)
+
+    with make_client(handler) as client, pytest.raises(SalesforceApiError):
+        handle_download_file(client, {"file_id": VERSION_ID})
+    assert [p.name for p in outbox.iterdir()] == [".base_url"]
 
 
 def test_download_file_without_base_url_errors(make_client, outbox):

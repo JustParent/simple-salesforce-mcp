@@ -57,12 +57,16 @@ logs only ever hold a small JSON envelope (`file_name`, `content_type`, `size`, 
 where to get the file). It accepts ContentVersion (`068…`), ContentDocument (`069…`, the latest
 version is used) and Attachment (`00P…`) Ids, and streams the blob to disk in chunks.
 
-- **Hosted sandbox (Harriet).** When `HARRIET_FILE_OUTBOX_DIR` is set, the file is written to
-  `<outbox>/<token>/<file name>` (`token` is 256-bit random) with a `.meta.json` alongside,
-  and the result carries `download_url` = `<base>/files/<token>`, where `<base>` is read from
-  `<outbox>/.base_url`. The sandbox bridge serves that URL **once**, then deletes the file;
-  unclaimed files expire after `HARRIET_FILE_OUTBOX_TTL_SECONDS` (default 120). The client
-  fetches the link straight into its workspace, e.g. `curl -fsSL -o scan.jpg "<download_url>"`.
+- **Hosted sandbox (Harriet).** When `HARRIET_FILE_OUTBOX_DIR` is set, the file is streamed
+  into a hidden `.staging-*` directory with a `.meta.json` alongside, then renamed to
+  `<outbox>/<token>/<file name>` once complete. `token` is `<expires_at>.<random>`: the Unix
+  expiry time (now + `HARRIET_FILE_OUTBOX_TTL_SECONDS`, default 120) and 256 random bits. The
+  result carries `download_url` = `<base>/files/<token>` (with `<base>` read from
+  `<outbox>/.base_url`) and `expires_at`. The sandbox bridge serves that URL **once**, then
+  deletes the file. It refuses the link once the expiry in the token has passed *or* the file
+  on disk is older than the TTL, since each check works without the other, and it sweeps
+  expired files in the background. The client fetches the link straight into its
+  workspace, e.g. `curl -fsSL -o scan.jpg "<download_url>"`.
 - **Local (standalone).** Otherwise the file is saved under `SALESFORCE_DOWNLOAD_DIR`
   (default `<tmp>/simple-salesforce-mcp`) and the result carries `local_path`.
 

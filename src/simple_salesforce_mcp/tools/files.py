@@ -4,10 +4,12 @@ File bytes never travel through a tool result. ``download_file`` streams the
 blob to disk and returns a small JSON envelope pointing at it:
 
 - **Sandbox mode** — when ``HARRIET_FILE_OUTBOX_DIR`` is set (Harriet's hosted
-  sandbox), the file is written to ``<outbox>/<token>/<name>`` and the result
-  carries a single-use, short-lived ``download_url`` served by the sandbox
-  bridge at ``<base_url>/files/<token>``. The bridge writes the public base URL
-  to ``<outbox>/.base_url``.
+  sandbox), the file is written to a hidden staging directory and, once complete,
+  renamed to ``<outbox>/<token>/<name>``. The result carries a single-use
+  ``download_url`` served by the sandbox bridge at ``<base_url>/files/<token>``;
+  the bridge writes the public base URL to ``<outbox>/.base_url``. Tokens are
+  ``<expires_at>.<random>``, so the link carries its own expiry and the bridge
+  checks it independently of the file on disk.
 - **Local mode** — otherwise the server runs on the user's machine, so the file
   is written under ``SALESFORCE_DOWNLOAD_DIR`` and the result carries its path.
 """
@@ -22,6 +24,8 @@ import re
 import secrets
 import shutil
 import tempfile
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from mcp.types import Tool, ToolAnnotations
@@ -386,11 +390,11 @@ def handle_download_file(client: SalesforceClient, arguments: dict) -> str:
                 "ERROR: file download links are not available in this environment yet "
                 "(no public base URL). Try again shortly."
             )
-        token = secrets.token_urlsafe(32)
-        target_dir = outbox_dir / token
+        # Dot-prefixed, so the bridge never serves a partially written file.
+        target_dir = outbox_dir / f".staging-{secrets.token_hex(16)}"
         target_dir.mkdir(mode=0o700, parents=True)
     else:
-        base_url = token = None
+        base_url = None
         root = Path(
             os.environ.get(DOWNLOAD_DIR_ENV)
             or Path(tempfile.gettempdir()) / "simple-salesforce-mcp"
@@ -418,13 +422,18 @@ def handle_download_file(client: SalesforceClient, arguments: dict) -> str:
         "size": written,
         "sha256": sha256,
     }
-    if token is not None:
-        # Written last: the bridge measures the link's age from this file.
+    if base_url is not None:
         (target_dir / OUTBOX_META_FILE).write_text(
             json.dumps({"file_name": file_name, "content_type": info["content_type"]})
         )
         ttl = _outbox_ttl_seconds()
+        expires_at = int(time.time()) + ttl
+        token = f"{expires_at}.{secrets.token_urlsafe(32)}"
+        target_dir.rename(target_dir.parent / token)
         payload["download_url"] = f"{base_url}/files/{token}"
+        payload["expires_at"] = (
+            datetime.fromtimestamp(expires_at, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+        )
         payload["expires_in_seconds"] = ttl
         payload["single_use"] = True
         payload["instructions"] = (
