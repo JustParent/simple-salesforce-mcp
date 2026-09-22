@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 import httpx
 
@@ -20,6 +22,9 @@ DEFAULT_API_VERSION = "62.0"
 # Total budget must fit inside the platform's per-tool-call RPC timeout
 # (30s default) with margin for bridge overhead.
 REQUEST_TIMEOUT = httpx.Timeout(25.0, connect=10.0)
+# Blob downloads are streamed; the read timeout applies per chunk, so large
+# files are bounded by the platform RPC timeout rather than this value.
+BLOB_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
 
 _PATH_SEGMENT_RE = re.compile(r"[A-Za-z0-9_]+")
 _FIELD_NAME_RE = re.compile(r"[A-Za-z0-9_.]+")
@@ -179,6 +184,21 @@ class SalesforceClient:
         return self._request(
             "POST", f"{self.data_path}/parameterizedSearch/", json_body=body
         ).json()
+
+    @contextmanager
+    def stream_blob(self, object_type: str, record_id: str, field: str) -> Iterator[httpx.Response]:
+        """Stream a blob field (e.g. ContentVersion.VersionData) without buffering it."""
+        path = (
+            f"{self.data_path}/sobjects/{_valid_segment(object_type, 'object_type')}"
+            f"/{_valid_segment(record_id, 'record_id')}/{_valid_segment(field, 'field')}"
+        )
+        with self._http.stream(
+            "GET", path, headers={"Accept": "*/*"}, timeout=BLOB_TIMEOUT
+        ) as response:
+            if response.status_code >= 400:
+                response.read()
+                raise _error_from_response(response)
+            yield response
 
     def userinfo(self) -> dict | None:
         """Best effort — returns None when the token lacks the id scope."""

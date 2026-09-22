@@ -27,9 +27,11 @@ def test_expected_tool_surface():
         "create_record",
         "delete_record",
         "describe_object",
+        "download_file",
         "get_org_info",
         "get_record",
         "list_objects",
+        "list_record_files",
         "run_soql_query",
         "search_records",
         "update_record",
@@ -48,6 +50,8 @@ def test_annotations_are_set_on_every_tool():
         "describe_object",
         "list_objects",
         "get_org_info",
+        "list_record_files",
+        "download_file",
     }
     destructive = {
         name for name, (tool, _) in TOOL_REGISTRY.items() if tool.annotations.destructiveHint

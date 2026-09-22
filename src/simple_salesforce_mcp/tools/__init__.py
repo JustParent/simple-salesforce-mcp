@@ -11,10 +11,16 @@ from collections.abc import Callable
 from mcp.types import Tool
 
 from ..sf_client import SalesforceClient
-from . import metadata, query, records
+from . import files, metadata, query, records
 
 Handler = Callable[[SalesforceClient, dict], str]
 
 TOOL_REGISTRY: dict[str, tuple[Tool, Handler]] = {
-    tool.name: (tool, handler) for tool, handler in [*query.TOOLS, *records.TOOLS, *metadata.TOOLS]
+    tool.name: (tool, handler)
+    for tool, handler in [
+        *query.TOOLS,
+        *records.TOOLS,
+        *files.TOOLS,
+        *metadata.TOOLS,
+    ]
 }
