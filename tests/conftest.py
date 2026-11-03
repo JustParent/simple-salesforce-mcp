@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 import httpx
@@ -59,3 +60,23 @@ def make_client(fake_home):
 
 def json_response(data, status: int = 200) -> httpx.Response:
     return httpx.Response(status, json=data)
+
+
+def parse_multipart(request: httpx.Request) -> dict[str, tuple[dict[str, str], bytes]]:
+    """Split a multipart/form-data request into ``{part name: (headers, body)}``, in order."""
+    content_type = request.headers["content-type"]
+    assert content_type.startswith("multipart/form-data; boundary="), content_type
+    delimiter = b"--" + content_type.split("boundary=", 1)[1].strip('"').encode()
+    parts: dict[str, tuple[dict[str, str], bytes]] = {}
+    for chunk in request.content.split(delimiter)[1:]:
+        if chunk.startswith(b"--"):  # closing delimiter
+            break
+        head, _, body = chunk.removeprefix(b"\r\n").partition(b"\r\n\r\n")
+        headers = {}
+        for line in head.decode().split("\r\n"):
+            key, _, value = line.partition(":")
+            headers[key.strip().lower()] = value.strip()
+        match = re.search(r'(?:^|;\s*)name="([^"]*)"', headers["content-disposition"])
+        assert match is not None, headers
+        parts[match.group(1)] = (headers, body.removesuffix(b"\r\n"))
+    return parts

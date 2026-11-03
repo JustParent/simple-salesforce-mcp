@@ -22,11 +22,15 @@ tree is too heavy for sandboxed environments.
 | `get_org_info` | no | Current user, org, instance URL, API version |
 | `list_record_files` | no | Files, legacy Attachments, and (for Cases) email attachments on a record |
 | `download_file` | no | Streams a file to disk and returns a link or path, never the bytes |
+| `prepare_file_upload` | yes | Hosted sandboxes only: reserves a single-use upload slot and returns a link to PUT the file to |
+| `upload_file` | yes, `local_path` is **confirm-gated** | Attaches a file to a record as a Salesforce File; the bytes never pass through the call |
 
 Every tool carries MCP annotations (`readOnlyHint` / `destructiveHint` / `idempotentHint`).
 `update_record` and `delete_record` refuse to act unless the call includes `confirm: true`,
 and the refusal message instructs the model to present the exact change to the user and get
-approval first. SOQL itself cannot modify data, so the escape hatch stays read-only.
+approval first. `upload_file` is gated the same way when given a `local_path`, since that
+reads a model-chosen path on the user's machine. SOQL itself cannot modify data, so the
+escape hatch stays read-only.
 
 ## Authentication
 
@@ -71,6 +75,45 @@ version is used) and Attachment (`00P…`) Ids, and streams the blob to disk in 
   (default `<tmp>/simple-salesforce-mcp`) and the result carries `local_path`.
 
 Downloads above `SALESFORCE_MAX_DOWNLOAD_BYTES` (default 500 MB) are refused.
+
+## Uploading files
+
+`upload_file` attaches a file (PDF, Word document, image, ...) to a record such as an Account
+or Case. It creates a Salesforce File (a ContentVersion) with `FirstPublishLocationId` set to
+the record, so the file appears under the record's Files with no Apex, Flow or Connected App
+involved. As with downloads, file content never travels through a tool call: the file streams
+from disk to Salesforce as `multipart/form-data`, and the result is a small JSON envelope
+(`content_version_id`, `file_name`, `size`, `linked_to`). Files above
+`SALESFORCE_MAX_UPLOAD_BYTES` (default 100 MB) are refused, and a very large file may not
+finish inside the platform's per-tool-call timeout.
+
+- **Hosted sandbox (Harriet).** The model's workspace is a different machine from the sandbox,
+  so the file goes through a single-use inbox, the mirror image of the download outbox. Set
+  `HARRIET_FILE_INBOX_DIR`, and the flow is:
+  1. `prepare_file_upload(file_name)` creates `<inbox>/<token>/` holding `.meta.json`
+     (`{"file_name": ..., "max_bytes": ...}`), built under a hidden `.staging-*` name and renamed
+     into place. `token` is `<expires_at>.<random>` like the outbox's, valid for
+     `HARRIET_FILE_INBOX_TTL_SECONDS` (default 600). The result carries `upload_token` and
+     `upload_url` = `<base>/uploads/<token>` (with `<base>` read from `<inbox>/.base_url`, which
+     must be `https://`). Expired slots are swept whenever this tool runs.
+  2. The client PUTs the file from its workspace, e.g. `curl -fsS -T report.pdf "<upload_url>"`.
+  3. `upload_file(record_id, upload_token)` streams `<inbox>/<token>/<file name>` to Salesforce
+     and deletes the slot. A failed upload keeps the slot, so it can be retried until the
+     token expires.
+
+  **The sandbox bridge must implement the PUT side** (it lives outside this repo). Accept exactly
+  one `PUT /uploads/<token>` per slot, refusing it if the expiry in the token has passed, if
+  `<inbox>/<token>/.meta.json` does not exist, or if the slot already holds a file. Stream the
+  body into a hidden file in the slot (refuse and discard anything above `max_bytes` from
+  `.meta.json`), and only once it is complete rename it to `<inbox>/<token>/<file_name>`, taking
+  `file_name` from `.meta.json`. `upload_file` only ever reads that final name, so it never sees
+  a partial upload. Without `HARRIET_FILE_INBOX_DIR` a sandbox reports that uploads are not
+  available yet.
+- **Local (standalone).** Otherwise the server runs on the user's machine, and `upload_file`
+  reads `local_path` directly. Because that is a model-chosen path, the call needs
+  `confirm: true` after the user has approved the exact file and record. `local_path` is refused
+  whenever `HARRIET_FILE_INBOX_DIR` or `HARRIET_FILE_OUTBOX_DIR` is set, since a sandbox's disk
+  holds the platform-written Salesforce credentials.
 
 ## Running
 
@@ -130,3 +173,7 @@ packaging breakage.
 - Responses are size-capped with explicit truncation notices.
 - File downloads never travel through a tool result; hosted download links are single-use,
   short-lived, and unguessable, and file names are reduced to a safe single path component.
+- File uploads never carry bytes in a tool call either. In a sandbox only a file the bridge
+  placed in a server-created, single-use slot is read (tokens must match a strict format and
+  symlinks are refused), and a model-chosen `local_path` is refused there and confirm-gated
+  everywhere else.
