@@ -32,9 +32,11 @@ def test_expected_tool_surface():
         "get_record",
         "list_objects",
         "list_record_files",
+        "prepare_file_upload",
         "run_soql_query",
         "search_records",
         "update_record",
+        "upload_file",
     ]
 
 

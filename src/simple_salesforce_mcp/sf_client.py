@@ -8,10 +8,12 @@ swapped without touching them.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Any, BinaryIO
 
 import httpx
 
@@ -22,8 +24,8 @@ DEFAULT_API_VERSION = "62.0"
 # Total budget must fit inside the platform's per-tool-call RPC timeout
 # (30s default) with margin for bridge overhead.
 REQUEST_TIMEOUT = httpx.Timeout(25.0, connect=10.0)
-# Blob downloads are streamed; the read timeout applies per chunk, so large
-# files are bounded by the platform RPC timeout rather than this value.
+# Blob downloads and uploads are streamed; the read/write timeouts apply per chunk,
+# so large files are bounded by the platform RPC timeout rather than this value.
 BLOB_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
 
 _PATH_SEGMENT_RE = re.compile(r"[A-Za-z0-9_]+")
@@ -199,6 +201,28 @@ class SalesforceClient:
                 response.read()
                 raise _error_from_response(response)
             yield response
+
+    def upload_content_version(
+        self, file: BinaryIO, *, title: str, file_name: str, parent_id: str
+    ) -> dict:
+        """Create a Salesforce File (ContentVersion) from an open binary file.
+
+        Sent as multipart/form-data so the file streams from disk instead of being
+        base64-encoded into a JSON body. ``FirstPublishLocationId`` makes Salesforce
+        create the link to ``parent_id`` itself.
+        """
+        metadata = {"Title": title, "PathOnClient": file_name, "FirstPublishLocationId": parent_id}
+        parts: dict[str, Any] = {
+            # entity_content first, as in Salesforce's documented request format.
+            "entity_content": (None, json.dumps(metadata), "application/json"),
+            "VersionData": (file_name, file, "application/octet-stream"),
+        }
+        response = self._http.post(
+            f"{self.data_path}/sobjects/ContentVersion/", files=parts, timeout=BLOB_TIMEOUT
+        )
+        if response.status_code >= 400:
+            raise _error_from_response(response)
+        return response.json()
 
     def userinfo(self) -> dict | None:
         """Best effort — returns None when the token lacks the id scope."""
