@@ -1,7 +1,8 @@
 """Thin Salesforce REST API client on httpx.
 
 Deliberately minimal: the tool surface only needs SOQL query, parameterized
-search, single-record CRUD, describe, the sobjects list, and userinfo. Tools
+search, single-record CRUD, describe, the sobjects list, invocable actions,
+files, and userinfo. Tools
 depend only on this module's public surface, so the transport layer can be
 swapped without touching them.
 """
@@ -30,6 +31,7 @@ BLOB_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
 
 _PATH_SEGMENT_RE = re.compile(r"[A-Za-z0-9_]+")
 _FIELD_NAME_RE = re.compile(r"[A-Za-z0-9_.]+")
+_ACTION_NAME_RE = re.compile(r"[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)?")
 
 HINTS = {
     "MALFORMED_QUERY": (
@@ -187,6 +189,23 @@ class SalesforceClient:
             "POST", f"{self.data_path}/parameterizedSearch/", json_body=body
         ).json()
 
+    def list_actions(self, action_type: str) -> dict:
+        """List invocable actions.
+
+        ``standard`` lists standard actions; ``custom`` returns the map of custom
+        action types to their URLs; any other value (``flow``, ``apex``,
+        ``quickAction``, ...) lists the custom actions of that type.
+        """
+        return self._request("GET", self._actions_path(action_type)).json()
+
+    def describe_action(self, action_type: str, name: str) -> dict:
+        return self._request("GET", self._actions_path(action_type, name)).json()
+
+    def invoke_action(self, action_type: str, name: str, inputs: list[dict]) -> list:
+        return self._request(
+            "POST", self._actions_path(action_type, name), json_body={"inputs": inputs}
+        ).json()
+
     @contextmanager
     def stream_blob(self, object_type: str, record_id: str, field: str) -> Iterator[httpx.Response]:
         """Stream a blob field (e.g. ContentVersion.VersionData) without buffering it."""
@@ -239,6 +258,33 @@ class SalesforceClient:
         return data if isinstance(data, dict) else None
 
     # -- internals ----------------------------------------------------------
+
+    def _actions_path(self, action_type: str, name: str | None = None) -> str:
+        action_type = _valid_segment(action_type, "action_type")
+        if action_type == "standard":
+            path = f"{self.data_path}/actions/standard"
+        elif action_type == "custom":
+            if name is not None:
+                raise SalesforceApiError(
+                    "action_type 'custom' only lists the custom action types; pass a "
+                    "specific type such as flow, apex or quickAction to describe or "
+                    "invoke an action.",
+                    error_code="INVALID_PARAMETER",
+                )
+            path = f"{self.data_path}/actions/custom"
+        else:
+            path = f"{self.data_path}/actions/custom/{action_type}"
+        if name is None:
+            return path
+        # Object-scoped quick actions are named Object.Action and addressed as
+        # .../quickAction/Object/Action, so each dotted part is its own segment.
+        if not isinstance(name, str) or not _ACTION_NAME_RE.fullmatch(name):
+            raise SalesforceApiError(
+                f"name must be an action API name such as publishKnowledgeArticles, "
+                f"My_Flow or Case.LogACall (got {name!r}).",
+                error_code="INVALID_PARAMETER",
+            )
+        return f"{path}/{name.replace('.', '/')}"
 
     def _request(
         self,
