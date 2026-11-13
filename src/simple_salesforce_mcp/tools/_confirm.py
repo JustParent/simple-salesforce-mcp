@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 
-def check_confirm(arguments: dict, action: str) -> str | None:
+def check_confirm(
+    arguments: dict,
+    action: str,
+    present: str = "object, record, and every field with its new value",
+) -> str | None:
     """Return an error string unless ``arguments['confirm']`` is literally True."""
     if arguments.get("confirm") is True:
         return None
     return (
         "CONFIRMATION REQUIRED — no changes were made. This call would "
-        f"{action}. Present the exact change to the user (object, record, and "
-        "every field with its new value), wait for their explicit approval, and "
+        f"{action}. Present the exact change to the user ({present}), wait for "
+        "their explicit approval, and "
         "only then call this tool again with confirm=true. Never set "
         "confirm=true without the user's approval."
     )

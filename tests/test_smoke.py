@@ -26,10 +26,13 @@ def test_expected_tool_surface():
     assert sorted(TOOL_REGISTRY) == [
         "create_record",
         "delete_record",
+        "describe_action",
         "describe_object",
         "download_file",
         "get_org_info",
         "get_record",
+        "invoke_action",
+        "list_actions",
         "list_objects",
         "list_record_files",
         "prepare_file_upload",
@@ -54,14 +57,16 @@ def test_annotations_are_set_on_every_tool():
         "get_org_info",
         "list_record_files",
         "download_file",
+        "list_actions",
+        "describe_action",
     }
     destructive = {
         name for name, (tool, _) in TOOL_REGISTRY.items() if tool.annotations.destructiveHint
     }
-    assert destructive == {"update_record", "delete_record"}
+    assert destructive == {"update_record", "delete_record", "invoke_action"}
 
 
 def test_confirm_is_required_in_write_schemas():
-    for name in ("update_record", "delete_record"):
+    for name in ("update_record", "delete_record", "invoke_action"):
         tool, _ = TOOL_REGISTRY[name]
         assert "confirm" in tool.inputSchema["required"], name

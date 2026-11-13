@@ -24,13 +24,37 @@ tree is too heavy for sandboxed environments.
 | `download_file` | no | Streams a file to disk and returns a link or path, never the bytes |
 | `prepare_file_upload` | yes | Hosted sandboxes only: reserves a single-use upload slot and returns a link to PUT the file to |
 | `upload_file` | yes, `local_path` is **confirm-gated** | Attaches a file to a record as a Salesforce File; the bytes never pass through the call |
+| `list_actions` | no | Invocable actions: standard, or custom by type (flow, apex, quickAction, ...) |
+| `describe_action` | no | An action's inputs (type, required, allowed values) and outputs |
+| `invoke_action` | yes, **confirm-gated** | Runs an action for one or more inputs and reports each one's success or errors |
 
 Every tool carries MCP annotations (`readOnlyHint` / `destructiveHint` / `idempotentHint`).
 `update_record` and `delete_record` refuse to act unless the call includes `confirm: true`,
 and the refusal message instructs the model to present the exact change to the user and get
 approval first. `upload_file` is gated the same way when given a `local_path`, since that
-reads a model-chosen path on the user's machine. SOQL itself cannot modify data, so the
+reads a model-chosen path on the user's machine. `invoke_action` is always gated, since
+what an action does cannot be known from its name. SOQL itself cannot modify data, so the
 escape hatch stays read-only.
+
+## Invocable actions
+
+Some changes are operations rather than field edits: a Knowledge article's `PublishStatus` is
+read-only, and moving it back to draft is the "Edit as Draft" action. The three action tools
+wrap Salesforce's [Actions REST API](https://developer.salesforce.com/docs/atlas.en-us.api_action.meta/api_action/)
+(`/actions/standard` and `/actions/custom/{type}`), the same actions Flow Builder offers, so
+they need no per-action code:
+
+- **Standard actions**, such as the Knowledge lifecycle (`createDraftFromOnlineKnowledgeArticle`,
+  `publishKnowledgeArticles`, `archiveKnowledgeArticles`), submit for approval, and send email.
+- **Custom actions**, which the org defines itself: autolaunched Flows (`flow`), Apex
+  `@InvocableMethod` classes (`apex`), quick actions (`quickAction`, named `Object.Action` for
+  object-scoped ones) and email alerts. An admin can expose a new operation by building an
+  autolaunched Flow, with no change to this server.
+
+The flow is `list_actions` → `describe_action` → `invoke_action`. Salesforce answers an
+invocation with HTTP 200 even when some inputs fail, so `invoke_action` reports each input's
+`success`, `outputs` and `errors`, and leads with `ERROR:` when every input failed or `PARTIAL:`
+when some did. Up to 200 inputs go in one call.
 
 ## Authentication
 
@@ -166,10 +190,10 @@ packaging breakage.
 ## Security notes
 
 - Access-token only: the server never requests, reads, or persists refresh tokens.
-- Destructive operations (update/delete) are gated behind an explicit `confirm=true`
+- Destructive operations (update, delete, invoke action) are gated behind an explicit `confirm=true`
   argument with model-facing guidance to obtain user approval first.
 - SOQL pagination cursors (`next_url`) are validated to be `/services/data/...` paths, and
-  object/record identifiers are validated before being placed in URLs.
+  object/record identifiers and action types/names are validated before being placed in URLs.
 - Responses are size-capped with explicit truncation notices.
 - File downloads never travel through a tool result; hosted download links are single-use,
   short-lived, and unguessable, and file names are reduced to a safe single path component.
