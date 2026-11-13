@@ -261,11 +261,15 @@ def handle_invoke_action(client: SalesforceClient, arguments: dict) -> str:
     succeeded = sum(1 for r in results if r["success"])
     total = len(results)
     if total and succeeded == 0:
-        head = f"ERROR: action {name} failed for all {total} input(s); nothing was done."
+        head = (
+            f"ERROR: action {name} reported failure for all {total} input(s). The "
+            "reason is in errors, or per item in outputs (items marked Success did go "
+            "through)."
+        )
     elif succeeded < total:
         head = (
-            f"PARTIAL: action {name} succeeded for {succeeded} of {total} inputs; "
-            "the failures below were not applied."
+            f"PARTIAL: action {name} succeeded for {succeeded} of {total} inputs; check "
+            "errors and outputs on the failed ones."
         )
     else:
         head = f"Ran action {name}: {succeeded} of {total} succeeded."

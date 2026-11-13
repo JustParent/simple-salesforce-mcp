@@ -300,4 +300,112 @@ def test_invoke_reports_total_failure_as_error(make_client):
 
     with make_client(handler) as client:
         text = handle_invoke_action(client, {**_INVOKE_ARGS, "confirm": True})
-    assert text.startswith(f"ERROR: action {KNOWLEDGE_ACTION} failed for all 1 input(s)")
+    assert text.startswith(f"ERROR: action {KNOWLEDGE_ACTION} reported failure for all 1 input(s)")
+
+
+_DOCS_REFUSAL = (
+    "You can't perform this action. Be sure the action is valid for the current state "
+    "of the article, and that you have permission to perform it."
+)
+
+
+def test_invoke_http_400_with_results_body_reports_the_reason(make_client):
+    # Action-scoped error, as documented for Knowledge actions; Salesforce sends it as HTTP 400.
+    def handler(request):
+        return json_response(
+            [
+                {
+                    "actionName": KNOWLEDGE_ACTION,
+                    "errors": [
+                        {"statusCode": "INVALID_API_INPUT", "message": _DOCS_REFUSAL, "fields": []}
+                    ],
+                    "isSuccess": False,
+                    "outputValues": None,
+                }
+            ],
+            status=400,
+        )
+
+    with make_client(handler) as client:
+        text = handle_invoke_action(client, {**_INVOKE_ARGS, "confirm": True})
+    head, body = text.split("\n", 1)
+    assert head.startswith("ERROR: action")
+    assert json.loads(body) == [
+        {
+            "input": 0,
+            "success": False,
+            "errors": [{"code": "INVALID_API_INPUT", "message": _DOCS_REFUSAL}],
+        }
+    ]
+
+
+def test_invoke_item_scoped_failure_shows_per_item_outputs(make_client):
+    def handler(request):
+        return json_response(
+            [
+                {
+                    "actionName": "archiveKnowledgeArticles",
+                    "errors": None,
+                    "isSuccess": False,
+                    "outputValues": {
+                        "ka0RM00000004Ve": _DOCS_REFUSAL,
+                        "ka0RM00000003do": "Success",
+                    },
+                }
+            ]
+        )
+
+    with make_client(handler) as client:
+        text = handle_invoke_action(
+            client,
+            {
+                "action_type": "standard",
+                "name": "archiveKnowledgeArticles",
+                "inputs": [{"articleVersionIdList": ["ka0RM00000004VeYAI", "ka0RM00000003doYAA"]}],
+                "confirm": True,
+            },
+        )
+    head, body = text.split("\n", 1)
+    assert "Success did go through" in head
+    assert json.loads(body)[0]["outputs"]["ka0RM00000003do"] == "Success"
+
+
+def test_invoke_400_without_results_body_still_raises(make_client):
+    def handler(request):
+        return json_response(
+            [{"errorCode": "JSON_PARSER_ERROR", "message": "Unexpected character"}], status=400
+        )
+
+    with make_client(handler) as client, pytest.raises(SalesforceApiError) as info:
+        handle_invoke_action(client, {**_INVOKE_ARGS, "confirm": True})
+    assert info.value.error_code == "JSON_PARSER_ERROR"
+
+
+def test_invoke_401_raises_auth_error_for_retry(make_client):
+    from simple_salesforce_mcp.sf_client import SalesforceAuthError
+
+    def handler(request):
+        return json_response(
+            [{"errorCode": "INVALID_SESSION_ID", "message": "Session expired"}], status=401
+        )
+
+    with make_client(handler) as client, pytest.raises(SalesforceAuthError):
+        handle_invoke_action(client, {**_INVOKE_ARGS, "confirm": True})
+
+
+def test_error_parser_reads_nested_action_errors(make_client):
+    # A non-invoke actions call returning the results shape still yields a real message.
+    def handler(request):
+        return json_response(
+            [
+                {
+                    "actionName": "x",
+                    "errors": [{"statusCode": "INVALID_API_INPUT", "message": "nope"}],
+                }
+            ],
+            status=400,
+        )
+
+    with make_client(handler) as client, pytest.raises(SalesforceApiError) as info:
+        handle_describe_action(client, {"action_type": "standard", "name": "x"})
+    assert info.value.for_model() == "INVALID_API_INPUT: nope"

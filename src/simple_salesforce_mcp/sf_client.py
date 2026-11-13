@@ -202,9 +202,19 @@ class SalesforceClient:
         return self._request("GET", self._actions_path(action_type, name)).json()
 
     def invoke_action(self, action_type: str, name: str, inputs: list[dict]) -> list:
-        return self._request(
-            "POST", self._actions_path(action_type, name), json_body={"inputs": inputs}
-        ).json()
+        """Run an action; returns one result per input.
+
+        Salesforce answers HTTP 400 when inputs fail, but the body is still the
+        per-input result list (``isSuccess`` / ``errors`` / ``outputValues``), so
+        that is returned for the caller to report instead of raised as a bare 400.
+        """
+        response = self._http.post(self._actions_path(action_type, name), json={"inputs": inputs})
+        if response.status_code >= 400:
+            results = _action_results(response)
+            if results is None:
+                raise _error_from_response(response)
+            return results
+        return response.json()
 
     @contextmanager
     def stream_blob(self, object_type: str, record_id: str, field: str) -> Iterator[httpx.Response]:
@@ -318,6 +328,23 @@ def _valid_field(value: str) -> str:
     return value
 
 
+def _action_results(response: httpx.Response) -> list | None:
+    """The per-input result list from an actions response, or None if it isn't one."""
+    if response.status_code == 401:
+        return None
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    if (
+        isinstance(body, list)
+        and body
+        and all(isinstance(item, dict) and "isSuccess" in item for item in body)
+    ):
+        return body
+    return None
+
+
 def _error_from_response(response: httpx.Response) -> SalesforceApiError:
     status = response.status_code
     error_code = ""
@@ -329,6 +356,15 @@ def _error_from_response(response: httpx.Response) -> SalesforceApiError:
         body = None
     if isinstance(body, list) and body:
         body = body[0]
+    if isinstance(body, dict) and "message" not in body and "errorCode" not in body:
+        # Actions-API shape: {"actionName", "errors": [{"statusCode", "message"}], ...}
+        nested = body.get("errors")
+        if isinstance(nested, list) and nested and isinstance(nested[0], dict):
+            body = {
+                "message": nested[0].get("message"),
+                "errorCode": nested[0].get("statusCode"),
+                "fields": nested[0].get("fields"),
+            }
     if isinstance(body, dict):
         message = str(body.get("message") or message)
         error_code = str(body.get("errorCode") or "")

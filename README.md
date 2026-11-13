@@ -51,10 +51,12 @@ they need no per-action code:
   object-scoped ones) and email alerts. An admin can expose a new operation by building an
   autolaunched Flow, with no change to this server.
 
-The flow is `list_actions` → `describe_action` → `invoke_action`. Salesforce answers an
-invocation with HTTP 200 even when some inputs fail, so `invoke_action` reports each input's
-`success`, `outputs` and `errors`, and leads with `ERROR:` when every input failed or `PARTIAL:`
-when some did. Up to 200 inputs go in one call.
+The flow is `list_actions` → `describe_action` → `invoke_action`. Salesforce reports the outcome
+per input in the response body, whether the HTTP status is 200 or 400, and some actions report
+per item inside one input (Knowledge actions put a message or `Success` against each article Id
+in `outputValues`). So `invoke_action` reports each input's `success`, `outputs` and `errors`,
+and leads with `ERROR:` when every input failed or `PARTIAL:` when some did. Up to 200 inputs
+go in one call.
 
 ## Authentication
 
